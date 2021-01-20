@@ -13,15 +13,15 @@ def parse_arguments():
     parser.add_argument('filename',
                         help='Path of the file to send')
     args = parser.parse_args()
-    
+
     if args.port_number < 1 or args.port_number > 65535:
         parser.error('port_number must be in range 1-65535')
-    
+
     return args
 
 class NetworkFileTransferer:
     ''' It is able to transfer a file over a socket with a predefined protocol.
-    
+
         The protocol sends data as specified:
         1. A 32 bit integer in network byte-order, specifying the length of the file's name + 1
         2. The filename as a Unicode string, followed by a null terminating character (\0)
@@ -35,7 +35,10 @@ class NetworkFileTransferer:
         self._buffer = b''
 
     def _send_buffer(self):
-        '''Send the whole content of own buffer, effecting multiple calls to socket.send if necessary.'''
+        ''' Send the content of own buffer.
+
+            Calls socket.send multiple times if necessary.
+            '''
         buffer_length_sent = 0
         buffer_size = len(self._buffer)
         while buffer_length_sent < buffer_size:
@@ -55,12 +58,12 @@ class NetworkFileTransferer:
         self._buffer = file_name
         self._send_buffer()
         # pack length of file into big endian 4 bytes
-        self._buffer = struct.pack('>i', os.stat(source.fileno()).st_size)
+        self._buffer = struct.pack('>i', os.stat(self._source_file.fileno()).st_size)
         self._send_buffer()
         while piece := self._source_file.read(4096):
             self._buffer = piece
             self._send_buffer()
-            
+
 def main():
     arguments = parse_arguments()
 
@@ -70,5 +73,5 @@ def main():
 
             transferer = NetworkFileTransferer(client_socket, source)
             transferer.transfer()
-                
+
 main()
