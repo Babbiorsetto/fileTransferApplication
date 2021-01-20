@@ -23,9 +23,9 @@ class NetworkFileTransferer:
     ''' It is able to transfer a file over a socket with a predefined protocol.
 
         The protocol sends data as specified:
-        1. A 32 bit integer in network byte-order, specifying the length of the file's name + 1
-        2. The filename as a Unicode string, followed by a null terminating character (\0)
-        3. A 32 bit integer specifying the file content's length
+        1. A 32 bit integer in network byte-order, specifying the length of the file's name
+        2. The filename as a UTF-8 encoded string, followed by a null terminating character (\x00)
+        3. A 32 bit integer in network byte-order, specifying the file content's length
         4. The file's content as binary data
         '''
 
