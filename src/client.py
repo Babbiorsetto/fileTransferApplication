@@ -1,6 +1,7 @@
 import argparse
 import socket
 import os
+import struct
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Transfer files between devices using sockets.')
@@ -29,19 +30,37 @@ class NetworkFileTransferer:
         '''
 
     def __init__(self, connected_socket, file_object):
-        self.socket = connected_socket
-        self.source_file = file_object
+        self._socket = connected_socket
+        self._source_file = file_object
+        self._buffer = b''
 
-    def _actually_send_buffer(self):
+    def _send_buffer(self):
+        '''Send the whole content of own buffer, effecting multiple calls to socket.send if necessary.'''
+        buffer_length_sent = 0
+        buffer_size = len(self._buffer)
+        while buffer_length_sent < buffer_size:
+            buffer_length_sent += self._socket.send(self._buffer[buffer_length_sent:buffer_size])
 
 
     def transfer(self):
-        
-        while piece := self.source_file.read(4096):
-            piece_length_sent = 0
-            while piece_length_sent < len(piece):
-                piece_length_sent += self.socket.send(piece[piece_length_sent:len(piece)])
-
+        '''Send the file by filling own buffer with correct data and calling _send_buffer.'''
+        # extract base file name
+        file_name = os.path.basename(self._source_file.name)
+        # convert name into bytes and append \0
+        file_name = bytes(file_name, 'UTF-8') + b'\0'
+        file_name_length = len(file_name)
+        # pack length of file name into big endian 4 bytes and prepare for shipment
+        self._buffer = struct.pack('>i', file_name_length)
+        self._send_buffer()
+        self._buffer = file_name
+        self._send_buffer()
+        # pack length of file into big endian 4 bytes
+        self._buffer = struct.pack('>i', os.stat(source.fileno()).st_size)
+        self._send_buffer()
+        while piece := self._source_file.read(4096):
+            self._buffer = piece
+            self._send_buffer()
+            
 def main():
     arguments = parse_arguments()
 
@@ -49,11 +68,7 @@ def main():
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
             client_socket.connect((arguments.server_ip, arguments.port_number))
 
-            print(os.stat(source.fileno()).st_size)
-            
-            while piece := source.read(5):
-                print(piece)
+            transferer = NetworkFileTransferer(client_socket, source)
+            transferer.transfer()
                 
-            print(total)
-
 main()
