@@ -12,7 +12,7 @@ def parse_arguments():
                         help='The directory where incoming files will be placed')
     args = parser.parse_args()
 
-    if args.port_number < 1 or args.port_number > 65535:
+    if not 1 <= args.port_number <= 65535:
         parser.error('port_number must be in range 1-65535')
 
     if not os.access(args.destination_directory, os.W_OK | os.X_OK):
@@ -47,7 +47,7 @@ class NetworkFileReceiver:
     def receive(self):
         # read and interpret name length
         self._get_from_socket(4)
-        file_name_length = struct.unpack('>i', self._buffer)[0]
+        file_name_length, = struct.unpack('>i', self._buffer)
         # read name
         self._get_from_socket(file_name_length)
         # decode name, also strips the ending \x00
@@ -56,7 +56,7 @@ class NetworkFileReceiver:
         with open(file_name, 'wb') as out_file:
             # read and interpret file length
             self._get_from_socket(4)
-            file_length = struct.unpack('>i', self._buffer)[0]
+            file_length, = struct.unpack('>i', self._buffer)
             length_read = 0
             # read and write into file until there is no more left
             while length_read < file_length:
@@ -70,7 +70,7 @@ def main():
         server_socket.bind(('', args.port_number))
         server_socket.listen()
         while True:
-            client_socket = server_socket.accept()[0]
+            client_socket, = server_socket.accept()
             receiver = NetworkFileReceiver(client_socket, args.destination_directory)
             receiver.receive()
 

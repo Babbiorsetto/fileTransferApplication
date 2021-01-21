@@ -14,7 +14,7 @@ def parse_arguments():
                         help='Path of the file to send')
     args = parser.parse_args()
 
-    if args.port_number < 1 or args.port_number > 65535:
+    if not 1 <= args.port_number <= 65535:
         parser.error('port_number must be in range 1-65535')
 
     return args
