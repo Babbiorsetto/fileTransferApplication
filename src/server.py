@@ -23,7 +23,7 @@ def parse_arguments():
 class NetworkFileReceiver:
     def __init__(self, connected_socket : socket.socket, directory_name : str):
         self._socket = connected_socket
-        self._directory_fd = directory_fd
+        self._directory_name = directory_name
         self._buffer = bytearray()
 
     def _get_from_socket(self, num_bytes):
@@ -70,7 +70,7 @@ def main():
         server_socket.bind(('', args.port_number))
         server_socket.listen()
         while True:
-            client_socket, = server_socket.accept()
+            client_socket, _ = server_socket.accept()
             receiver = NetworkFileReceiver(client_socket, args.destination_directory)
             receiver.receive()
 
