@@ -2,6 +2,7 @@ import argparse
 import os
 import struct
 import socket
+import logging
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Transfer files between devices using sockets')
@@ -10,6 +11,10 @@ def parse_arguments():
                         help='The port number to listen on')
     parser.add_argument('destination_directory',
                         help='The directory where incoming files will be placed')
+    parser.add_argument('--logfile',
+                        default=None,
+                        help='An optional file to redirect informational messages to'
+                        )
     args = parser.parse_args()
 
     if not 1 <= args.port_number <= 65535:
@@ -21,14 +26,16 @@ def parse_arguments():
     return args
 
 class NetworkFileReceiver:
-    def __init__(self, connected_socket : socket.socket, directory_name : str):
+    def __init__(self, connected_socket : socket.socket, directory_name : str, job_number):
         self._socket = connected_socket
         self._directory_name = directory_name
+        self._job_number = job_number
         self._buffer = bytearray()
+        self._logger = logging.getLogger('server')
 
     def _get_from_socket(self, num_bytes):
         ''' Reads data from own socket into own buffer.
-        
+
             It attempts to read num_bytes bytes, only reading less
             if the socket is closed before it can read the full amount.
             Returns the amount read: either num_bytes or less than num_bytes
@@ -63,15 +70,35 @@ class NetworkFileReceiver:
                 read_this_cycle = self._get_from_socket(4096)
                 length_read += read_this_cycle
                 out_file.write(self._buffer)
+        self._logger.info('[%d] file name: "%s", file size: "%dB". DONE',
+                          self._job_number, file_name, file_length
+                         )
+
+def initialize_logger(logfile):
+    logger = logging.getLogger('server')
+    logger.setLevel(logging.INFO)
+    formatter = logging.Formatter(fmt='%(asctime)s: %(message)s', datefmt='%d %b %Y %H:%M:%S')
+    handler = logging.StreamHandler(logfile)
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    return logger
 
 def main():
     args = parse_arguments()
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
-        server_socket.bind(('', args.port_number))
-        server_socket.listen()
-        while True:
-            client_socket, _ = server_socket.accept()
-            receiver = NetworkFileReceiver(client_socket, args.destination_directory)
-            receiver.receive()
+    with open(1, 'w') if args.logfile is None else open(args.logfile, 'a') as logfile:
+        logger = initialize_logger(logfile)
+        logger.info('Server started')
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
+            logger.info('Listening on port %(port)d', {'port': args.port_number})
+            server_socket.bind(('', args.port_number))
+            server_socket.listen()
+            received_count = 0
+            while True:
+                client_socket, remote_address = server_socket.accept()
+                logger.info('Connection from %s dispatching worker %d',
+                            remote_address, received_count)
+                receiver = NetworkFileReceiver(client_socket, args.destination_directory, received_count)
+                receiver.receive()
+                received_count += 1
 
 main()

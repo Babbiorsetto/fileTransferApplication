@@ -2,6 +2,7 @@ import argparse
 import socket
 import os
 import struct
+import datetime
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Transfer files between devices using sockets.')
@@ -12,6 +13,10 @@ def parse_arguments():
                         help='The port the server is listening on')
     parser.add_argument('filename',
                         help='Path of the file to send')
+    parser.add_argument('--logfile',
+                        default=None,
+                        help='An optional file to redirect informational messages to'
+                        )
     args = parser.parse_args()
 
     if not 1 <= args.port_number <= 65535:
@@ -29,9 +34,10 @@ class NetworkFileTransferer:
         4. The file's content as binary data
         '''
 
-    def __init__(self, connected_socket, file_object):
+    def __init__(self, connected_socket, file_object, log_file):
         self._socket = connected_socket
         self._source_file = file_object
+        self._log_file = log_file
         self._buffer = b''
 
     def _send_buffer(self):
@@ -47,22 +53,34 @@ class NetworkFileTransferer:
 
     def transfer(self):
         '''Send the file by filling own buffer with correct data and calling _send_buffer.'''
+        print('Starting transfer...', file=self._log_file)
         # extract base file name
         file_name = os.path.basename(self._source_file.name)
         # convert name into bytes and append \0
         file_name = bytes(file_name, 'UTF-8') + b'\0'
         file_name_length = len(file_name)
+        print(f'File name: {file_name}\nEncoded name size:{file_name_length}', file=self._log_file)
         # pack length of file name into big endian 4 bytes and prepare for shipment
         self._buffer = struct.pack('>i', file_name_length)
         self._send_buffer()
         self._buffer = file_name
         self._send_buffer()
         # pack length of file into big endian 4 bytes
-        self._buffer = struct.pack('>i', os.stat(self._source_file.fileno()).st_size)
+        file_size = os.stat(self._source_file.fileno()).st_size
+        self._buffer = struct.pack('>i', file_size)
         self._send_buffer()
+        sent = 0
+        one_second = datetime.timedelta(milliseconds=500)
+        previous_time = datetime.datetime.now()
         while piece := self._source_file.read(4096):
             self._buffer = piece
             self._send_buffer()
+            sent += 4096
+            now = datetime.datetime.now()
+            if now > previous_time + one_second:
+                previous_time = now
+                print('Transfer {0}%'.format(sent * 100 / file_size), file=self._log_file)
+        print('Done', file=self._log_file)
 
 def main():
     arguments = parse_arguments()
@@ -71,7 +89,8 @@ def main():
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
             client_socket.connect((arguments.server_ip, arguments.port_number))
 
-            transferer = NetworkFileTransferer(client_socket, source)
-            transferer.transfer()
+            with open(1, 'w') if arguments.logfile is None else open(arguments.logfile, 'a') as logfile:
+                transferer = NetworkFileTransferer(client_socket, source, logfile)
+                transferer.transfer()
 
 main()
