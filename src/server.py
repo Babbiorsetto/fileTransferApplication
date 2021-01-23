@@ -3,6 +3,7 @@ import os
 import struct
 import socket
 import logging
+import threading
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Transfer files between devices using sockets')
@@ -75,6 +76,11 @@ class NetworkFileReceiver:
                          )
 
 def initialize_logger(logfile):
+    ''' Given an open file-like object, create a new logger named "server".
+
+        The new logger has a logging level of info, an attached handler which just
+        passes logs to a formatter that adds date and time and then outputs to the logfile
+    '''
     logger = logging.getLogger('server')
     logger.setLevel(logging.INFO)
     formatter = logging.Formatter(fmt='%(asctime)s: %(message)s', datefmt='%d %b %Y %H:%M:%S')
@@ -82,6 +88,15 @@ def initialize_logger(logfile):
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     return logger
+
+def start_new_receiver(client_socket, mailbox_directory, job_number):
+    receiver = NetworkFileReceiver(client_socket, mailbox_directory, job_number)
+    receiver.receive()
+
+def start_job(client_socket, mailbox_directory, job_number):
+    threading.Thread(target=start_new_receiver,
+                     args=(client_socket, mailbox_directory, job_number)
+                    ).start()
 
 def main():
     args = parse_arguments()
@@ -97,8 +112,8 @@ def main():
                 client_socket, remote_address = server_socket.accept()
                 logger.info('Connection from %s dispatching worker %d',
                             remote_address, received_count)
-                receiver = NetworkFileReceiver(client_socket, args.destination_directory, received_count)
-                receiver.receive()
+                start_job(client_socket, args.destination_directory, received_count)
                 received_count += 1
 
-main()
+if __name__ == '__main__':
+    main()

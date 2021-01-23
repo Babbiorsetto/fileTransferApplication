@@ -93,4 +93,5 @@ def main():
                 transferer = NetworkFileTransferer(client_socket, source, logfile)
                 transferer.transfer()
 
-main()
+if __name__ == '__main__':
+    main()
